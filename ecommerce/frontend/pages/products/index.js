@@ -1,36 +1,76 @@
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
+import { useRouter } from 'next/router';
 import { apiFetch } from '../../utils/api';
 
 export default function ProductsPage() {
+  const router = useRouter();
   const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [sortBy, setSortBy] = useState('');
 
+  // Sync category query param from URL if present
+  useEffect(() => {
+    if (router.query.category) {
+      setSelectedCategory(router.query.category);
+    }
+  }, [router.query.category]);
+
+  // Load categories
+  useEffect(() => {
+    let isMounted = true;
+    async function loadCategories() {
+      try {
+        const data = await apiFetch('/categories');
+        if (isMounted && data?.categories) {
+          setCategories(data.categories);
+        }
+      } catch (err) {
+        console.error('Error fetching categories:', err.message);
+      }
+    }
+    loadCategories();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Load products based on filters
   useEffect(() => {
     let isMounted = true;
     async function loadProducts() {
       try {
         setLoading(true);
-        // Will fetch from backend /products endpoint in later phases
-        const data = await apiFetch('/products');
+        const params = new URLSearchParams();
+        if (searchTerm.trim()) params.append('search', searchTerm.trim());
+        if (selectedCategory) params.append('category', selectedCategory);
+        if (sortBy) params.append('sort', sortBy);
+
+        const queryString = params.toString() ? `?${params.toString()}` : '';
+        const data = await apiFetch(`/products${queryString}`);
         if (isMounted && data?.products) {
           setProducts(data.products);
         }
       } catch (err) {
-        // Backend /products endpoint will be implemented in Phase 5
-        console.log('Products API status:', err.message);
+        console.error('Error fetching products:', err.message);
       } finally {
         if (isMounted) {
           setLoading(false);
         }
       }
     }
-    loadProducts();
+
+    // Debounce search slightly
+    const timer = setTimeout(() => {
+      loadProducts();
+    }, 250);
+
     return () => {
+      clearTimeout(timer);
       isMounted = false;
     };
   }, [searchTerm, selectedCategory, sortBy]);
@@ -54,7 +94,7 @@ export default function ProductsPage() {
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search by title..."
+              placeholder="Search by title or description..."
               className="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
@@ -67,9 +107,11 @@ export default function ProductsPage() {
               className="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
             >
               <option value="">All Categories</option>
-              <option value="electronics">Electronics</option>
-              <option value="fashion">Fashion</option>
-              <option value="home">Home & Kitchen</option>
+              {categories.map((cat) => (
+                <option key={cat._id} value={cat._id}>
+                  {cat.name}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -80,9 +122,10 @@ export default function ProductsPage() {
               onChange={(e) => setSortBy(e.target.value)}
               className="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
             >
-              <option value="">Featured</option>
+              <option value="">Featured (Newest)</option>
               <option value="price_asc">Price: Low to High</option>
               <option value="price_desc">Price: High to Low</option>
+              <option value="oldest">Oldest First</option>
             </select>
           </div>
         </div>
@@ -95,36 +138,57 @@ export default function ProductsPage() {
           </div>
         ) : products.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {products.map((item) => (
-              <div key={item._id} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition">
-                <div className="h-48 bg-slate-100 flex items-center justify-center text-slate-400">
-                  {item.image ? (
-                    <img src={item.image} alt={item.title} className="w-full h-full object-cover" />
-                  ) : (
-                    <span>No Image</span>
-                  )}
-                </div>
-                <div className="p-4">
-                  <h3 className="font-bold text-slate-800 text-base">{item.title}</h3>
-                  <p className="text-xs text-slate-500 mt-1 line-clamp-2">{item.description}</p>
-                  <div className="mt-4 flex items-center justify-between">
-                    <span className="text-lg font-black text-indigo-600">${item.price}</span>
-                    <button className="text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg transition">
-                      View
-                    </button>
+            {products.map((item) => {
+              const imageSrc = item.image
+                ? item.image.startsWith('http')
+                  ? item.image
+                  : `http://localhost:5000${item.image}`
+                : 'https://placehold.co/400x300?text=Product';
+
+              return (
+                <div key={item._id} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition flex flex-col">
+                  <div className="h-48 bg-slate-100 flex items-center justify-center text-slate-400 overflow-hidden">
+                    <img
+                      src={imageSrc}
+                      alt={item.title}
+                      className="w-full h-full object-cover hover:scale-105 transition duration-300"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = 'https://placehold.co/400x300?text=Product';
+                      }}
+                    />
+                  </div>
+                  <div className="p-4 flex flex-col flex-grow">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 mb-1">
+                      {item.category?.name || 'General'}
+                    </span>
+                    <h3 className="font-bold text-slate-800 text-base mb-1">{item.title}</h3>
+                    <p className="text-xs text-slate-500 line-clamp-2 mb-4 flex-grow">{item.description}</p>
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                      <div>
+                        <span className="text-lg font-black text-indigo-600">${item.price?.toFixed(2)}</span>
+                        <span className="text-[10px] text-slate-400 block">{item.stock} in stock</span>
+                      </div>
+                      <Link
+                        href={`/admin`}
+                        className="text-xs font-semibold bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition"
+                      >
+                        Manage
+                      </Link>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center">
             <div className="w-16 h-16 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mx-auto text-2xl mb-3">
               📦
             </div>
-            <h3 className="text-base font-bold text-slate-800">No Products in Database Yet</h3>
+            <h3 className="text-base font-bold text-slate-800">No Products Found</h3>
             <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-6">
-              Connect your MongoDB Atlas in backend/.env, then create products via the Admin dashboard or backend API.
+              There are no products matching your filter criteria. You can create new products in the Admin Dashboard.
             </p>
             <Link
               href="/admin"
@@ -138,4 +202,3 @@ export default function ProductsPage() {
     </>
   );
 }
-

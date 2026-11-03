@@ -6,7 +6,14 @@ const cookieParser = require('cookie-parser');
 const mongoose = require('mongoose');
 const connectDB = require('./config/db');
 const { notFound, errorHandler } = require('./middleware/errorMiddleware');
+
+// Route imports
 const authRoutes = require('./routes/authRoutes');
+const categoryRoutes = require('./routes/categoryRoutes');
+const productRoutes = require('./routes/productRoutes');
+const customerRoutes = require('./routes/customerRoutes');
+const orderRoutes = require('./routes/orderRoutes');
+const uploadRoutes = require('./routes/uploadRoutes');
 
 // 1. Load environment variables
 dotenv.config();
@@ -68,6 +75,11 @@ app.get('/', (req, res) => {
 
 // 6. Application REST API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/categories', categoryRoutes);
+app.use('/api/products', productRoutes);
+app.use('/api/customers', customerRoutes);
+app.use('/api/orders', orderRoutes);
+app.use('/api/upload', uploadRoutes);
 
 // 7. Error Handling Middlewares
 app.use(notFound);
@@ -81,7 +93,8 @@ const startServer = async () => {
     app.listen(PORT, () => {
       console.log(`🚀 Server running in ${process.env.NODE_ENV || 'development'} mode on http://localhost:${PORT}`);
       console.log(`📡 Health endpoint available at: http://localhost:${PORT}/api/health`);
-      console.log(`🔐 Auth endpoints available at: http://localhost:${PORT}/api/auth`);
+      console.log(`📦 Catalog endpoints at: /api/products, /api/categories`);
+      console.log(`👥 Customer & Order endpoints at: /api/customers, /api/orders`);
     });
   } catch (error) {
     console.error('❌ Failed to start server due to database connection error.');
